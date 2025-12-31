@@ -37,10 +37,6 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/health", () => "OrderService running");
-app.Run("http://0.0.0.0:80");
-// Fix for CS0234: Ensure the correct namespace is used for InventoryService.
-// If InventoryService is in a different namespace, update the using statement accordingly.
-// For example, if the correct namespace is MS1.Inventory.Services, change the using statement to:
 
-
-// If you are unsure of the correct namespace, please provide the definition or location of InventoryService.
+// DO NOT specify URL here
+app.Run();

@@ -3,6 +3,7 @@ using MS1.OrderService.Services;
 using MS1.PaymentService.Services;
 using MS1.InventoryService.Services;
 using MS1.NotificationService.Services;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,17 +16,19 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Event subscriptions
-var orderService = app.Services.GetRequiredService<OrderManager>();
+// RabbitMQ connection for subscribers
+var factory = new ConnectionFactory() { HostName = "localhost" };
+var connection = factory.CreateConnection();
 
+// Subscribe services to RabbitMQ
 var paymentService = new PaymentService();
-orderService.OrderCreated += paymentService.ProcessPayment;
+paymentService.SubscribeRabbitMQ(connection);
 
 var inventoryService = new InventoryService();
-orderService.OrderCreated += inventoryService.UpdateStock;
+inventoryService.SubscribeRabbitMQ(connection);
 
 var notificationService = new NotificationService();
-orderService.OrderCreated += notificationService.SendNotification;
+notificationService.SubscribeRabbitMQ(connection);
 
 if (app.Environment.IsDevelopment())
 {
@@ -37,6 +40,4 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 app.MapGet("/health", () => "OrderService running");
-
-// DO NOT specify URL here
 app.Run();

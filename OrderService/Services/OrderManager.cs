@@ -1,11 +1,9 @@
-﻿using MS1.OrderService.Events;
-using MS1.OrderService.Models;
+﻿using MS1.OrderService.Models;
 using MS1.OrderService.Repositories;
+using MS1.NotificationService.Events;
 using RabbitMQ.Client;
 using System.Text;
 using System.Text.Json;
-using RabbitMQ.Client.Events;
-
 
 namespace MS1.OrderService.Services
 {
@@ -13,7 +11,7 @@ namespace MS1.OrderService.Services
     {
         private readonly OrderRepository _repo;
         private readonly IConnection _connection;
-        private readonly IModel _channel;
+        private readonly IChannel _channel;
 
         public event Action<OrderCreatedEvent>? OrderCreated;
 
@@ -21,34 +19,46 @@ namespace MS1.OrderService.Services
         {
             _repo = repo;
 
-            // Setup RabbitMQ connection
-            var factory = new ConnectionFactory() { HostName = "localhost" };
-            _connection = factory.CreateConnection();
-            _channel = _connection.CreateModel();
-            _channel.QueueDeclare(queue: "orders", durable: false, exclusive: false, autoDelete: false);
+            var factory = new ConnectionFactory
+            {
+                HostName = "localhost"
+            };
+
+            _connection = factory.CreateConnectionAsync().GetAwaiter().GetResult();
+            _channel = _connection.CreateChannelAsync().GetAwaiter().GetResult();
+
+            // ❌ DON'T assign return value
+            _channel.ExchangeDeclareAsync(
+                exchange: "order_exchange",
+                type: ExchangeType.Fanout
+            ).GetAwaiter().GetResult();
         }
 
         public Order CreateOrder(Order order)
         {
-            var created = _repo.Add(order);
+            _repo.Add(order);
 
             var orderEvent = new OrderCreatedEvent
             {
-                Id = created.Id,
-                ProductName = created.ProductName,
-                Quantity = created.Quantity,
-                Price = created.Price,
-                CreatedAt = created.CreatedAt
+                Id = order.Id,
+                ProductName = order.ProductName,
+                Quantity = order.Quantity,
+                Price = order.Price,
+                CreatedAt = order.CreatedAt
             };
 
-            // Trigger in-memory events
             OrderCreated?.Invoke(orderEvent);
 
-            // Publish to RabbitMQ
             var body = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(orderEvent));
-            _channel.BasicPublish(exchange: "", routingKey: "orders", basicProperties: null, body: body);
 
-            return created;
+            // ❌ DON'T assign return value
+            _channel.BasicPublishAsync(
+                exchange: "order_exchange",
+                routingKey: "",
+                body: body
+            ).GetAwaiter().GetResult();
+
+            return order;
         }
 
         public IEnumerable<Order> GetAllOrders() => _repo.GetAll();

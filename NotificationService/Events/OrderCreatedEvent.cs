@@ -1,4 +1,4 @@
-﻿namespace MS1.OrderService.Events
+﻿namespace MS1.NotificationService.Events
 {
     public class OrderCreatedEvent
     {

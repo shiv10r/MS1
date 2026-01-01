@@ -1,29 +1,59 @@
-﻿using MS1.OrderService.Events;
+﻿using MS1.NotificationService.Events;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using System.Text;
+using System.Text.Json;
 
 namespace MS1.InventoryService.Services;
 
 public class InventoryService
 {
-    public void SubscribeRabbitMQ(RabbitMQ.Client.IConnection connection)
+    public async Task SubscribeRabbitMQAsync(IConnection connection)
     {
-        var channel = connection.CreateModel();
-        channel.ExchangeDeclare(exchange: "order_exchange", type: RabbitMQ.Client.ExchangeType.Fanout);
-        var queueName = channel.QueueDeclare().QueueName;
-        channel.QueueBind(queue: queueName, exchange: "order_exchange", routingKey: "");
+        // ✅ RabbitMQ 7.x uses async channels
+        var channel = await connection.CreateChannelAsync();
 
-        var consumer = new RabbitMQ.Client.Events.EventingBasicConsumer(channel);
-        consumer.Received += (model, ea) =>
+        await channel.ExchangeDeclareAsync(
+            exchange: "order_exchange",
+            type: ExchangeType.Fanout
+        );
+
+        var queue = await channel.QueueDeclareAsync();
+
+        await channel.QueueBindAsync(
+            queue: queue.QueueName,
+            exchange: "order_exchange",
+            routingKey: ""
+        );
+
+        // ✅ New consumer for RabbitMQ 7.x
+        var consumer = new AsyncEventingBasicConsumer(channel);
+
+        consumer.ReceivedAsync += async (model, ea) =>
         {
-            var body = ea.Body.ToArray();
-            var orderEvent = System.Text.Json.JsonSerializer.Deserialize<OrderCreatedEvent>(body);
+            var json = Encoding.UTF8.GetString(ea.Body.ToArray());
+            var orderEvent = JsonSerializer.Deserialize<OrderCreatedEvent>(json);
+
             if (orderEvent != null)
+            {
                 UpdateStock(orderEvent);
+            }
+
+            await Task.CompletedTask;
         };
-        channel.BasicConsume(queue: queueName, autoAck: true, consumer: consumer);
+
+        await channel.BasicConsumeAsync(
+            queue: queue.QueueName,
+            autoAck: true,
+            consumer: consumer
+        );
     }
 
-    public void UpdateStock(OrderCreatedEvent orderEvent)
+    private void UpdateStock(OrderCreatedEvent orderEvent)
     {
-        Console.WriteLine($"[InventoryService] Stock updated for order {orderEvent.OrderId}, Product: {orderEvent.ProductName}, Quantity: {orderEvent.Quantity}");
+        Console.WriteLine(
+            $"[InventoryService] Stock updated for OrderId={orderEvent.Id}, " +
+            $"Product={orderEvent.ProductName}, Quantity={orderEvent.Quantity}"
+        );
     }
 }

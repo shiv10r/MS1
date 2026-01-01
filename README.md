@@ -27,21 +27,28 @@ Services do not call each other directly.
 Each service works independently and can scale separately.
 
 
-🏗️ System Design (Event-Driven Architecture)
-Client
-  |
-  v
-Order API
-  |
-  v
-Order Repository
-  |
-  v
-RabbitMQ (OrderCreatedEvent)
-  |        |           |
-  v        v           v
-Payment  Inventory  Notification
-Service  Service     Service
+               ┌──────────────┐
+               │  API / Client│
+               └──────┬───────┘
+                      │ HTTP Requests
+                      ▼
+               ┌──────────────┐
+               │ OrderService │
+               │  (OrderManager)│
+               └──────┬───────┘
+                      │ Publishes Orders
+                      ▼
+               ┌──────────────┐
+               │  RabbitMQ    │
+               │  Exchange    │
+               └──────┬───────┘
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+ ┌──────────────┐ ┌──────────────┐ ┌───────────────┐
+ │PaymentService│ │InventoryService│ │NotificationSvc│
+ │   Process    │ │ Update Stock  │ │ Send Notify   │
+ └──────────────┘ └──────────────┘ └───────────────┘
+
 
 
 ✅ Key Highlights
